@@ -22,6 +22,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -272,24 +273,29 @@ namespace Infohazard.StateSystem {
 
         public void Initialize(Type baseType) {
             Valid = false;
-            var parts = _path.Split('/');
+            RenamedPath = null;
             FieldChain.Clear();
 
-            if (baseType == null) return;
+            if (baseType == null || string.IsNullOrEmpty(_path)) return;
+
+            var parts = _path.Split('/');
+            bool renamed = false;
 
             Type currentType = baseType;
             foreach (string part in parts) {
-                FieldInfo field = currentType.GetField(part, BindingFlags);
-                PropertyInfo property = currentType.GetProperty(part, BindingFlags);
-                if (field != null && IsValidField(field)) {
-                    FieldChain.Add(new FieldGetSet(field));
-                    currentType = field.FieldType;
-                } else if (property != null && IsValidProperty(property)) {
-                    FieldChain.Add(new PropertyGetSet(property));
-                    currentType = property.PropertyType;
-                } else {
+                IGetSet member = FindMember(currentType, part) ?? FindRenamedMember(currentType, part);
+                if (member == null) {
+                    FieldChain.Clear();
                     return;
                 }
+
+                renamed |= member.Name != part;
+                FieldChain.Add(member);
+                currentType = member.Type;
+            }
+
+            if (renamed) {
+                RenamedPath = string.Join("/", FieldChain.Select(m => m.Name));
             }
 
             IsEnumFlags = (_type == SerializableType.Enum) &&
@@ -297,6 +303,56 @@ namespace Infohazard.StateSystem {
             FieldName = FieldChain[FieldChain.Count - 1].Name;
 
             Valid = true;
+        }
+
+        /// <summary>
+        /// If the stored path refers to members that have since been renamed (found via
+        /// <see cref="FormerlySerializedAsAttribute"/> or <see cref="FormerlyOverriddenAsAttribute"/>),
+        /// this is the path using the current member names. Otherwise null.
+        /// Set by <see cref="Initialize"/>; the stored path is not changed until <see cref="ApplyRenamedPath"/>.
+        /// </summary>
+        public string RenamedPath { get; private set; }
+
+        public bool HasRenamedPath => RenamedPath != null;
+
+        /// <summary>
+        /// Replace the stored path with <see cref="RenamedPath"/>, if there is one.
+        /// </summary>
+        /// <returns>Whether the path changed.</returns>
+        public bool ApplyRenamedPath() {
+            if (RenamedPath == null) return false;
+            _path = RenamedPath;
+            RenamedPath = null;
+            return true;
+        }
+
+        private static IGetSet FindMember(Type type, string name) {
+            FieldInfo field = type.GetField(name, BindingFlags);
+            if (field != null && IsValidField(field)) return new FieldGetSet(field);
+
+            PropertyInfo property = type.GetProperty(name, BindingFlags);
+            if (property != null && IsValidProperty(property)) return new PropertyGetSet(property);
+
+            return null;
+        }
+
+        private static IGetSet FindRenamedMember(Type type, string oldName) {
+            foreach (FieldInfo field in type.GetFields(BindingFlags)) {
+                if (!IsValidField(field)) continue;
+                if (field.GetCustomAttributes<FormerlySerializedAsAttribute>().Any(a => a.oldName == oldName) ||
+                    field.GetCustomAttributes<FormerlyOverriddenAsAttribute>().Any(a => a.OldName == oldName)) {
+                    return new FieldGetSet(field);
+                }
+            }
+
+            foreach (PropertyInfo property in type.GetProperties(BindingFlags)) {
+                if (!IsValidProperty(property)) continue;
+                if (property.GetCustomAttributes<FormerlyOverriddenAsAttribute>().Any(a => a.OldName == oldName)) {
+                    return new PropertyGetSet(property);
+                }
+            }
+
+            return null;
         }
 
         public object GetFieldValue(object baseObject) {

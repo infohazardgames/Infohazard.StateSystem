@@ -31,6 +31,15 @@ namespace Infohazard.StateSystem.Editor {
         private new ComponentOverride target => base.target as ComponentOverride;
         private static List<string> headers = new List<string>();
 
+        private void OnEnable() {
+            // Like FormerlySerializedAs: when a stored path uses a member's former name, switch to the new one.
+            // Done here rather than per-repaint so a conflicting rename only warns once. A recompile recreates
+            // the inspector, so renames made while the inspector is open are still picked up.
+            if (target != null && target.ApplyRenamedPaths()) {
+                EditorUtility.SetDirty(target);
+            }
+        }
+
         private void ListDropdown() {
             var menu = new GenericMenu();
             

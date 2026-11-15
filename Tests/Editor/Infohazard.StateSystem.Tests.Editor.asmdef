@@ -1,0 +1,26 @@
+{
+    "name": "Infohazard.StateSystem.Tests.Editor",
+    "rootNamespace": "Infohazard.StateSystem.Tests.Editor",
+    "references": [
+        "Infohazard.StateSystem",
+        "Infohazard.StateSystem.Editor",
+        "Infohazard.Core",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

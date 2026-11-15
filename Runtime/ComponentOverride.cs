@@ -124,6 +124,38 @@ namespace Infohazard.StateSystem {
             }
         }
 
+        /// <summary>
+        /// Whether any override's stored path refers to a member by a former name
+        /// (see <see cref="FormerlyOverriddenAsAttribute"/>).
+        /// </summary>
+        public bool HasRenamedPaths => _overrides != null && _overrides.Any(o => o.HasRenamedPath);
+
+        /// <summary>
+        /// Rewrite any override paths that refer to members by a former name so they use the current name.
+        /// An override is left unchanged (and a warning logged) if another override already uses the new path.
+        /// </summary>
+        /// <returns>Whether any path changed.</returns>
+        public bool ApplyRenamedPaths() {
+            if (_overrides == null) return false;
+
+            bool changed = false;
+            foreach (SerializedValueOverride value in _overrides) {
+                if (!value.HasRenamedPath) continue;
+
+                string newPath = value.RenamedPath;
+                if (_overrides.Any(o => o != value && o.Path == newPath)) {
+                    Debug.LogWarning($"{name}: cannot rename override path '{value.Path}' to '{newPath}' " +
+                                     "because an override with that path already exists.", this);
+                    continue;
+                }
+
+                value.ApplyRenamedPath();
+                changed = true;
+            }
+
+            return changed;
+        }
+
         private void Refresh() {
             _validPaths = null;
             _type = null;
