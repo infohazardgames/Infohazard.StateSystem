@@ -64,10 +64,10 @@ namespace Infohazard.StateSystem.Editor {
                 string newName = name;
                 current.Add(newName);
 
-                var label = new GUIContent(ObjectNames.NicifyVariableName(newName),
-                                           field != null
-                                               ? field is PropertyGetSet ? _iconProperty : _iconField
-                                               : _iconMissing);
+                GUIContent label = new GUIContent(ObjectNames.NicifyVariableName(newName),
+                                                  field != null
+                                                      ? field is PropertyGetSet ? _iconProperty : _iconField
+                                                      : _iconMissing);
                 EditorGUI.BeginDisabledGroup(field == null);
                 EditorGUILayout.LabelField(label);
                 EditorGUI.EndDisabledGroup();
@@ -139,7 +139,7 @@ namespace Infohazard.StateSystem.Editor {
                     newValue = EditorGUILayout.Vector4Field(label, (Vector4)value);
                     break;
                 case SerializableType.Quaternion:
-                    var q = (Quaternion)value;
+                    Quaternion q = (Quaternion)value;
                     Vector4 v = EditorGUILayout.Vector4Field(label, new Vector4(q.x, q.y, q.z, q.w));
                     newValue = new Quaternion(v.x, v.y, v.z, v.w);
                     break;

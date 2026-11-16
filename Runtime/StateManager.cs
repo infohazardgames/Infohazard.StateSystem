@@ -78,10 +78,10 @@ namespace Infohazard.StateSystem {
         }
 
         private void ApplyInternalStates() {
-            var activeDict = Parent ? Parent._statesActive : _statesActive;
+            Dictionary<string, bool> activeDict = Parent ? Parent._statesActive : _statesActive;
             if (activeDict == null) return;
 
-            foreach (var item in activeDict) {
+            foreach (KeyValuePair<string, bool> item in activeDict) {
                 SetStateActiveInternal(item.Key, item.Value);
             }
         }

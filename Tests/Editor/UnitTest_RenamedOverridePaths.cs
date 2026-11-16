@@ -160,7 +160,7 @@ namespace Infohazard.StateSystem.Tests.Editor {
             isOn.Value = true;
 
             // Same as ComponentOverride.ApplyTo, which requires a Component (not possible in an editor-only assembly).
-            var target = new RenamedMembersTestTarget();
+            RenamedMembersTestTarget target = new RenamedMembersTestTarget();
             foreach (SerializedValueOverride value in _asset.Overrides) {
                 value.SetFieldValue(target);
             }
@@ -174,7 +174,7 @@ namespace Infohazard.StateSystem.Tests.Editor {
         public void Migrate_RecordsRenamesAndUnresolvedPaths() {
             AddOverrideWithStoredPath("_speed", "_oldSpeed");
             AddOverrideWithStoredPath("_count", "_doesNotExist");
-            var result = new ComponentOverrideMigration.Result();
+            ComponentOverrideMigration.Result result = new ComponentOverrideMigration.Result();
 
             bool changed = ComponentOverrideMigration.Migrate(_asset, "Test.asset", result);
 
@@ -188,7 +188,7 @@ namespace Infohazard.StateSystem.Tests.Editor {
         [Test]
         public void Migrate_MissingType_ReportsUnresolvedType() {
             _asset.TypeName = "Not.A.Real.Type";
-            var result = new ComponentOverrideMigration.Result();
+            ComponentOverrideMigration.Result result = new ComponentOverrideMigration.Result();
 
             Assert.IsFalse(ComponentOverrideMigration.Migrate(_asset, "Test.asset", result));
             Assert.AreEqual(1, result.Unresolved.Count);

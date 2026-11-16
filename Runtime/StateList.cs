@@ -69,7 +69,7 @@ namespace Infohazard.StateSystem {
         public void Initialize(Object owner) {
             _owner = owner;
 
-            var fieldIDs = new Dictionary<string, int>();
+            Dictionary<string, int> fieldIDs = new Dictionary<string, int>();
             List<bool> statesActive = _states.Select(s => s.IsActive).ToList();
             for (int i = 0; i < _states.Length; i++) {
                 ComponentOverride values = _states[i].Values;
@@ -200,7 +200,7 @@ namespace Infohazard.StateSystem {
 
             if (previous >= 0 && previous < stateIndex) return;
 
-            var valueOverride = _states[stateIndex].Values.Overrides[localFieldIndex];
+            SerializedValueOverride valueOverride = _states[stateIndex].Values.Overrides[localFieldIndex];
             if (previous < 0) {
                 _fieldDefaultValues[fieldID] = valueOverride.GetFieldValue(_owner);
             }
@@ -209,11 +209,11 @@ namespace Infohazard.StateSystem {
 
         private void DeactivateField(int stateIndex, int localFieldIndex) {
             int fieldID = _states[stateIndex].FieldIDs[localFieldIndex];
-            int previous = GetFirstStateControllingField(fieldID, stateIndex, out var previousValueOverride);
+            int previous = GetFirstStateControllingField(fieldID, stateIndex, out SerializedValueOverride previousValueOverride);
 
             if (previous >= 0 && previous < stateIndex) return;
 
-            var valueOverride = _states[stateIndex].Values.Overrides[localFieldIndex];
+            SerializedValueOverride valueOverride = _states[stateIndex].Values.Overrides[localFieldIndex];
             if (previous < 0) {
                 valueOverride.SetFieldValue(_owner, _fieldDefaultValues[fieldID]);
             } else {

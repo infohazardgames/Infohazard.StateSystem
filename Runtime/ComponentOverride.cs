@@ -90,7 +90,7 @@ namespace Infohazard.StateSystem {
             int pathsIndex = ValidPaths.IndexOf(path);
             if (pathsIndex < 0) return;
 
-            var newObj = new SerializedValueOverride { Path = path };
+            SerializedValueOverride newObj = new SerializedValueOverride { Path = path };
             newObj.FirstTimeInitialize(Type);
 
             Array.Resize(ref _overrides, _overrides.Length + 1);
@@ -101,7 +101,7 @@ namespace Infohazard.StateSystem {
                 if (prevIndex < pathsIndex) {
                     break;
                 } else {
-                    var temp = _overrides[i];
+                    SerializedValueOverride temp = _overrides[i];
                     _overrides[i] = _overrides[i - 1];
                     _overrides[i - 1] = temp;
                 }
@@ -117,7 +117,7 @@ namespace Infohazard.StateSystem {
 
         public void CheckValid() {
             if (_overrides == null) return;
-            foreach (var value in _overrides) {
+            foreach (SerializedValueOverride value in _overrides) {
                 if (!value.Valid) {
                     value.Initialize(Type);
                 }
@@ -161,7 +161,7 @@ namespace Infohazard.StateSystem {
             _type = null;
 
             if (_overrides != null) {
-                foreach (var value in _overrides) {
+                foreach (SerializedValueOverride value in _overrides) {
                     value.Initialize(Type);
                 }
             }
@@ -187,7 +187,7 @@ namespace Infohazard.StateSystem {
                 throw new UnityException("Component " + component.name + " of incorrect type.");
             }
 
-            foreach (var item in _overrides) {
+            foreach (SerializedValueOverride item in _overrides) {
                 item.SetFieldValue(component);
             }
         }

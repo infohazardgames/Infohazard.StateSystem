@@ -247,7 +247,7 @@ namespace Infohazard.StateSystem {
                         _vectorValue = (Vector4)value;
                         break;
                     case SerializableType.Quaternion:
-                        var q = (Quaternion)value;
+                        Quaternion q = (Quaternion)value;
                         _vectorValue = new Vector4(q.x, q.y, q.z, q.w);
                         break;
                     case SerializableType.Color:
@@ -278,7 +278,7 @@ namespace Infohazard.StateSystem {
 
             if (baseType == null || string.IsNullOrEmpty(_path)) return;
 
-            var parts = _path.Split('/');
+            string[] parts = _path.Split('/');
             bool renamed = false;
 
             Type currentType = baseType;
@@ -430,7 +430,7 @@ namespace Infohazard.StateSystem {
         }
 
         public static List<string> GetValidPathsForType(Type type) {
-            var result = new List<string>();
+            List<string> result = new List<string>();
             GetValidPathsForType(type, result, 0, string.Empty);
             return result;
         }
@@ -441,10 +441,10 @@ namespace Infohazard.StateSystem {
                 paths.Add(path);
             } else if (depth < MaxDepth && (depth == 0 || IsSerializableClass(type))) {
                 if (!string.IsNullOrEmpty(path)) path += '/';
-                foreach (var field in type.GetFields(BindingFlags)) {
+                foreach (FieldInfo field in type.GetFields(BindingFlags)) {
                     if (IsValidField(field)) GetValidPathsForType(field.FieldType, paths, depth + 1, path + field.Name);
                 }
-                foreach (var property in type.GetProperties(BindingFlags)) {
+                foreach (PropertyInfo property in type.GetProperties(BindingFlags)) {
                     if (IsValidProperty(property)) GetValidPathsForType(property.PropertyType, paths, depth + 1, path + property.Name);
                 }
             }

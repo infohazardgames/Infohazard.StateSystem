@@ -41,9 +41,9 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         private void ListDropdown() {
-            var menu = new GenericMenu();
+            GenericMenu menu = new GenericMenu();
             
-            foreach (var path in target.UnusedValidPaths) {
+            foreach (string path in target.UnusedValidPaths) {
                 menu.AddItem(new GUIContent(path),
                     false, (object data) => {
                         Undo.RecordObject(target, "Add Override");
@@ -66,7 +66,7 @@ namespace Infohazard.StateSystem.Editor {
             target.CheckValid();
 
             serializedObject.Update();
-            var type = target.TypeName;
+            string type = target.TypeName;
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_typeName"), new GUIContent("Target Type"));
             serializedObject.ApplyModifiedProperties();
 
@@ -82,9 +82,9 @@ namespace Infohazard.StateSystem.Editor {
                 EditorGUILayout.LabelField("Value Overrides", EditorStyles.boldLabel);
                 int toRemove = -1;
                 headers.Clear();
-                var indent = EditorGUI.indentLevel;
+                int indent = EditorGUI.indentLevel;
                 for (int i = 0; i < target.Overrides.Length; i++) {
-                    var prop = target.Overrides[i];
+                    SerializedValueOverride prop = target.Overrides[i];
                     SerializedValueDrawing.UpdateHeading(prop, headers);
                     EditorGUILayout.BeginHorizontal();
                     SerializedValueDrawing.DrawLayout(target, prop);

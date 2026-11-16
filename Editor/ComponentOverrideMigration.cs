@@ -47,7 +47,7 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         public static Result MigrateAll() {
-            var result = new Result();
+            Result result = new Result();
             string[] guids = AssetDatabase.FindAssets($"t:{nameof(ComponentOverride)}");
 
             foreach (string guid in guids) {
@@ -74,7 +74,7 @@ namespace Infohazard.StateSystem.Editor {
                 return false;
             }
 
-            var oldPaths = asset.Overrides.Where(o => o.HasRenamedPath).ToDictionary(o => o, o => o.Path);
+            Dictionary<SerializedValueOverride, string> oldPaths = asset.Overrides.Where(o => o.HasRenamedPath).ToDictionary(o => o, o => o.Path);
 
             bool changed = asset.ApplyRenamedPaths();
             if (changed) {
@@ -104,7 +104,7 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         public static string FormatResult(Result result) {
-            var sb = new StringBuilder();
+            StringBuilder sb = new StringBuilder();
             sb.Append($"Migrated component overrides: {result.Renamed.Count} path(s) renamed in " +
                       $"{result.ModifiedAssetCount} of {result.AssetCount} asset(s).");
 

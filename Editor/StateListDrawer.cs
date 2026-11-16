@@ -27,6 +27,7 @@ using Infohazard.Core.Editor;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Infohazard.StateSystem.Editor {
     [CustomPropertyDrawer(typeof(StateList))]
@@ -35,7 +36,7 @@ namespace Infohazard.StateSystem.Editor {
         private string[] stateNames;
 
         protected override ReorderableList CreateList(SerializedProperty prop) {
-            var list = base.CreateList(prop);
+            ReorderableList list = base.CreateList(prop);
             list.elementHeightCallback = null;
             list.onAddDropdownCallback = ListDropdown;
             return list;
@@ -46,7 +47,7 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         private static Type GetStateType(SerializedProperty property) {
-            var target = property.serializedObject.targetObject;
+            Object target = property.serializedObject.targetObject;
             if (target is IStateBehaviour stateBehaviour) {
                 return stateBehaviour.Type;
             } else {
@@ -56,11 +57,11 @@ namespace Infohazard.StateSystem.Editor {
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label) {
             if (property.isExpanded) {
-                var type = GetStateType(property);
-                var listProp = GetListProperty(property);
+                Type type = GetStateType(property);
+                SerializedProperty listProp = GetListProperty(property);
                 List<string> names = new List<string>();
                 for (int i = 0; i < listProp.arraySize; i++) {
-                    var nameProperty = GetElementProperty(property, i).FindPropertyRelative("_name");
+                    SerializedProperty nameProperty = GetElementProperty(property, i).FindPropertyRelative("_name");
 
                     string suffix = "";
                     int num = 0;
@@ -71,8 +72,8 @@ namespace Infohazard.StateSystem.Editor {
                     if (num > 0) nameProperty.stringValue += suffix;
                     names.Add(nameProperty.stringValue);
 
-                    var valuesProperty = GetElementProperty(property, i).FindPropertyRelative("_values");
-                    var values = valuesProperty.objectReferenceValue as ComponentOverride;
+                    SerializedProperty valuesProperty = GetElementProperty(property, i).FindPropertyRelative("_values");
+                    ComponentOverride values = valuesProperty.objectReferenceValue as ComponentOverride;
                     if (values && !values.Type.IsAssignableFrom(type)) {
                         valuesProperty.objectReferenceValue = null;
                     }
@@ -88,7 +89,7 @@ namespace Infohazard.StateSystem.Editor {
             Undo.RecordObject(listProperty.serializedObject.targetObject, "Create State");
             listProperty.arraySize++;
 
-            var newState = listProperty.GetArrayElementAtIndex(listProperty.arraySize - 1);
+            SerializedProperty newState = listProperty.GetArrayElementAtIndex(listProperty.arraySize - 1);
             newState.FindPropertyRelative("_name").stringValue = name;
             newState.FindPropertyRelative("_values").objectReferenceValue = values;
             newState.FindPropertyRelative("_blockedBy").intValue = 0;
@@ -99,7 +100,7 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         private void ListDropdown(Rect rect, ReorderableList list) {
-            var menu = new GenericMenu();
+            GenericMenu menu = new GenericMenu();
             menu.AddItem(new GUIContent("Use Existing Override"),
                 false, data => {
                     CreateNewState(list.serializedProperty, "Empty", null);
@@ -107,10 +108,10 @@ namespace Infohazard.StateSystem.Editor {
 
             menu.AddItem(new GUIContent("Create New Override"),
                 false, data => {
-                    var type = GetStateType(list.serializedProperty);
+                    Type type = GetStateType(list.serializedProperty);
                     string path = EditorUtility.SaveFilePanelInProject("Save New Override", ComponentOverride.DefaultNameForType(type), "asset", "Create");
                     if (!string.IsNullOrEmpty(path)) {
-                        var newOverride = ScriptableObject.CreateInstance<ComponentOverride>();
+                        ComponentOverride newOverride = ScriptableObject.CreateInstance<ComponentOverride>();
                         newOverride.TypeName = type.FullName;
                         AssetDatabase.CreateAsset(newOverride, path);
                         CreateNewState(list.serializedProperty, newOverride.displayName, newOverride);
@@ -121,17 +122,17 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         protected override void DrawElement(Rect rect, int index, bool isActive, bool isFocused, SerializedProperty prop) {
-            var element = GetElementProperty(prop, index);
+            SerializedProperty element = GetElementProperty(prop, index);
             rect.height = EditorGUI.GetPropertyHeight(element.FindPropertyRelative("_name"), GUIContent.none);
 
-            MathUtility.SplitHorizontal(rect, gap, out var r1, out var r2);
-            MathUtility.SplitHorizontal(r1, gap, out var r3, out var r4);
-            MathUtility.SplitHorizontal(r2, gap, out var r5, out var r6, 0.4f);
+            MathUtility.SplitHorizontal(rect, gap, out Rect r1, out Rect r2);
+            MathUtility.SplitHorizontal(r1, gap, out Rect r3, out Rect r4);
+            MathUtility.SplitHorizontal(r2, gap, out Rect r5, out Rect r6, 0.4f);
 
             EditorGUI.PropertyField(r3, element.FindPropertyRelative("_name"), GUIContent.none);
             EditorGUI.PropertyField(r4, element.FindPropertyRelative("_values"), GUIContent.none);
 
-            var align = GUI.skin.label.alignment;
+            TextAnchor align = GUI.skin.label.alignment;
             GUI.skin.label.alignment = TextAnchor.MiddleRight;
 
             r5.xMin += Mathf.Max(0, r5.width - 75);
@@ -139,10 +140,10 @@ namespace Infohazard.StateSystem.Editor {
             GUI.skin.label.alignment = align;
 
             r6.xMax -= r6.height + gap;
-            var r7 = new Rect(r6.xMax + gap, r6.y, r6.height, r6.height);
+            Rect r7 = new Rect(r6.xMax + gap, r6.y, r6.height, r6.height);
 
             if (Application.isPlaying && prop.serializedObject.targetObject is IStateBehaviour stateBehavior) {
-                var name = element.FindPropertyRelative("_name").stringValue;
+                string name = element.FindPropertyRelative("_name").stringValue;
                 bool active = stateBehavior.IsStateActive(name);
                 bool newActive = EditorGUI.Toggle(r7, active);
                 if (newActive != active) {
@@ -152,7 +153,7 @@ namespace Infohazard.StateSystem.Editor {
                 EditorGUI.PropertyField(r7, element.FindPropertyRelative("_isActive"), GUIContent.none);
             }
 
-            var maskProp = element.FindPropertyRelative("_blockedBy");
+            SerializedProperty maskProp = element.FindPropertyRelative("_blockedBy");
             maskProp.intValue = EditorGUI.MaskField(r6, maskProp.intValue, stateNames) & ~(1 << index);
         }
     }
