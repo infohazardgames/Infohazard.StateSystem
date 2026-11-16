@@ -5,6 +5,7 @@
         "Infohazard.StateSystem",
         "Infohazard.StateSystem.Editor",
         "Infohazard.Core",
+        "Infohazard.StateSystem.Tests.PlayMode",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
