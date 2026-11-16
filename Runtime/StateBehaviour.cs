@@ -32,6 +32,12 @@ namespace Infohazard.StateSystem {
         void SetStateActive(string stateName, bool value);
     }
 
+    /// <summary>
+    /// Base class for a component whose own values are overridden by a <see cref="StateList"/>.
+    /// </summary>
+    /// <remarks>
+    /// Don't clone an instance whose states are already applied; see <see cref="StateList"/>.
+    /// </remarks>
     public abstract class StateBehaviour : MonoBehaviour, IStateBehaviour {
         [FormerlySerializedAs("states")] [SerializeField]
         private StateList _states;

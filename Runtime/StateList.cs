@@ -54,6 +54,18 @@ namespace Infohazard.StateSystem {
         }
     }
 
+    /// <summary>
+    /// A list of named states that override values on an owner object. When several active states override the
+    /// same field, the state with the lower index wins. A state is blocked (active, but not applied) while any
+    /// active, unblocked state in its <see cref="State.BlockedBy"/> mask is active.
+    /// </summary>
+    /// <remarks>
+    /// When a field is first overridden, its current value is captured and restored once no state overrides it.
+    /// The captured values aren't serialized, but the overridden field values and the active flags are. So cloning
+    /// an object whose states are already applied (<c>Object.Instantiate</c> on a live, initialized object rather
+    /// than a prefab) gives a clone that treats the overridden values as its defaults: turning those states off on
+    /// the clone leaves the overridden values in place. Instantiate from prefabs instead.
+    /// </remarks>
     [Serializable]
     public class StateList {
         [FormerlySerializedAs("states")] [SerializeField]
@@ -66,22 +78,46 @@ namespace Infohazard.StateSystem {
             _states = states;
         }
 
+        /// <summary>
+        /// The most states whose blocking works; <see cref="State.BlockedBy"/> is a 32-bit mask of state indices.
+        /// </summary>
+        public const int MaxBlockingStates = 32;
+
         public void Initialize(Object owner) {
             _owner = owner;
+            _states ??= Array.Empty<State>();
+
+            if (_states.Length > MaxBlockingStates) {
+                Debug.LogError($"{OwnerName}: has {_states.Length} states, but only the first " +
+                               $"{MaxBlockingStates} can block other states.", owner);
+            }
+
+            if (!owner && _states.Any(s => s.Values)) {
+                Debug.LogError("A state list has no object to apply its states to, so its values are skipped.");
+            }
 
             Dictionary<string, int> fieldIDs = new Dictionary<string, int>();
             List<bool> statesActive = _states.Select(s => s.IsActive).ToList();
             for (int i = 0; i < _states.Length; i++) {
-                ComponentOverride values = _states[i].Values;
+                ComponentOverride values = CanApply(_states[i]) ? _states[i].Values : null;
 
                 _states[i].FieldIDs = new int[values ? values.Overrides.Length : 0];
                 _states[i].IsActive = false;
                 _states[i].IsBlocked = false;
 
                 for (int j = 0; j < _states[i].FieldIDs.Length; j++) {
-                    if (!fieldIDs.TryGetValue(values.Overrides[j].Path, out int fieldID)) {
+                    SerializedValueOverride value = values.Overrides[j];
+                    if (!value.Valid) {
+                        _states[i].FieldIDs[j] = -1;
+                        continue;
+                    }
+
+                    // Key by the current member path, so a renamed path that hasn't been migrated yet and the
+                    // current path control the same field.
+                    string key = value.RenamedPath ?? value.Path;
+                    if (!fieldIDs.TryGetValue(key, out int fieldID)) {
                         fieldID = fieldIDs.Count;
-                        fieldIDs[values.Overrides[j].Path] = fieldID;
+                        fieldIDs[key] = fieldID;
                     }
 
                     _states[i].FieldIDs[j] = fieldID;
@@ -97,7 +133,34 @@ namespace Infohazard.StateSystem {
             }
         }
 
+        private string OwnerName => _owner ? _owner.name : "State list";
+
+        /// <summary>
+        /// Whether a state's values can be applied to the owner. Logs why not, and warns about overrides that don't
+        /// resolve (those are skipped individually).
+        /// </summary>
+        private bool CanApply(State state) {
+            ComponentOverride values = state.Values;
+            if (!values || !_owner) return false;
+
+            if (values.Type == null) {
+                Debug.LogError($"{OwnerName}: state '{state.Name}' uses override '{values.name}', whose target type " +
+                               $"'{values.TypeName}' was not found, so its values are skipped.", _owner);
+                return false;
+            }
+
+            if (!values.Type.IsInstanceOfType(_owner)) {
+                Debug.LogError($"{OwnerName}: state '{state.Name}' uses override '{values.name}', which is for " +
+                               $"{values.Type.Name}, not {_owner.GetType().Name}, so its values are skipped.", _owner);
+                return false;
+            }
+
+            values.WarnIfInvalidOverrides();
+            return true;
+        }
+
         private int GetStateIndex(string name) {
+            if (_states == null) return -1;
             for (int i = 0; i < _states.Length; i++) {
                 if (_states[i].Name == name) {
                     return i;
@@ -123,7 +186,8 @@ namespace Infohazard.StateSystem {
         }
 
         private bool IsStateBlockedBy(int state, int blockingState) {
-            return state != blockingState && 
+            return state != blockingState &&
+                blockingState < MaxBlockingStates &&
                 _states[blockingState].IsActive && 
                 !_states[blockingState].IsBlocked && 
                 (_states[state].BlockedBy & (1 << blockingState)) != 0;
@@ -161,6 +225,8 @@ namespace Infohazard.StateSystem {
             if (fieldStatusChanging) {
                 bool isActivating = active && !isBlocked;
                 for (int i = 0; i < _states[stateIndex].FieldIDs.Length; i++) {
+                    if (_states[stateIndex].FieldIDs[i] < 0) continue; // Override that doesn't resolve.
+
                     if (isActivating) {
                         ActivateField(stateIndex, i);
                     } else {

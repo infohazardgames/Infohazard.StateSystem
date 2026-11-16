@@ -39,20 +39,73 @@ namespace Infohazard.StateSystem.Editor {
             ReorderableList list = base.CreateList(prop);
             list.elementHeightCallback = null;
             list.onAddDropdownCallback = ListDropdown;
+            list.onReorderCallbackWithDetails = (l, oldIndex, newIndex) => RemapBlockedByAfterMove(l, oldIndex, newIndex);
+            list.onRemoveCallback = RemoveState;
             return list;
+        }
+
+        /// <summary>
+        /// Remap every state's <c>_blockedBy</c> mask with <paramref name="mapIndex"/>, which gives each old state
+        /// index its new index, or -1 if that state is gone. Bits past the end of the list are left alone.
+        /// </summary>
+        private static void RemapBlockedBy(SerializedProperty listProperty, int oldCount, Func<int, int> mapIndex) {
+            for (int i = 0; i < listProperty.arraySize; i++) {
+                SerializedProperty maskProperty = listProperty.GetArrayElementAtIndex(i).FindPropertyRelative("_blockedBy");
+                int oldMask = maskProperty.intValue;
+                int newMask = 0;
+                for (int bit = 0; bit < 32; bit++) {
+                    if ((oldMask & (1 << bit)) == 0) continue;
+                    int newBit = bit < oldCount ? mapIndex(bit) : bit;
+                    if (newBit >= 0 && newBit < 32) newMask |= 1 << newBit;
+                }
+
+                maskProperty.intValue = newMask;
+            }
+        }
+
+        /// <summary>
+        /// After a state is dragged from <paramref name="oldIndex"/> to <paramref name="newIndex"/> (the list has
+        /// already moved it), keep each <c>_blockedBy</c> mask pointing at the same states.
+        /// </summary>
+        private static void RemapBlockedByAfterMove(ReorderableList list, int oldIndex, int newIndex) {
+            SerializedProperty listProperty = list.serializedProperty;
+            RemapBlockedBy(listProperty, listProperty.arraySize, i => {
+                if (i == oldIndex) return newIndex;
+                if (oldIndex < newIndex && i > oldIndex && i <= newIndex) return i - 1;
+                if (newIndex < oldIndex && i >= newIndex && i < oldIndex) return i + 1;
+                return i;
+            });
+            listProperty.serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// Remove the selected state and keep each <c>_blockedBy</c> mask pointing at the same states.
+        /// </summary>
+        private static void RemoveState(ReorderableList list) {
+            SerializedProperty listProperty = list.serializedProperty;
+            int index = list.index;
+            if (index < 0 || index >= listProperty.arraySize) return;
+
+            int oldCount = listProperty.arraySize;
+            listProperty.DeleteArrayElementAtIndex(index);
+            RemapBlockedBy(listProperty, oldCount, i => i == index ? -1 : i > index ? i - 1 : i);
+            listProperty.serializedObject.ApplyModifiedProperties();
+
+            if (list.index >= listProperty.arraySize) list.index = listProperty.arraySize - 1;
         }
 
         protected override SerializedProperty GetListProperty(SerializedProperty prop) {
             return prop.FindPropertyRelative("_states");
         }
 
+        /// <summary>
+        /// The type the states override, or null if it isn't known yet (an <see cref="ExteriorStateBehaviour"/>
+        /// with no component reports plain <see cref="Component"/>).
+        /// </summary>
         private static Type GetStateType(SerializedProperty property) {
             Object target = property.serializedObject.targetObject;
-            if (target is IStateBehaviour stateBehaviour) {
-                return stateBehaviour.Type;
-            } else {
-                return target.GetType();
-            }
+            Type type = target is IStateBehaviour stateBehaviour ? stateBehaviour.Type : target.GetType();
+            return type == typeof(Component) ? null : type;
         }
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label) {
@@ -74,7 +127,10 @@ namespace Infohazard.StateSystem.Editor {
 
                     SerializedProperty valuesProperty = GetElementProperty(property, i).FindPropertyRelative("_values");
                     ComponentOverride values = valuesProperty.objectReferenceValue as ComponentOverride;
-                    if (values && !values.Type.IsAssignableFrom(type)) {
+
+                    // Only clear an override when both types are known and don't match. A missing type may be
+                    // temporary (mid-refactor, or the component isn't assigned yet).
+                    if (values && type != null && values.Type != null && !values.Type.IsAssignableFrom(type)) {
                         valuesProperty.objectReferenceValue = null;
                     }
                 }
@@ -105,6 +161,12 @@ namespace Infohazard.StateSystem.Editor {
                 false, data => {
                     CreateNewState(list.serializedProperty, "Empty", null);
                 }, null);
+
+            if (GetStateType(list.serializedProperty) == null) {
+                menu.AddDisabledItem(new GUIContent("Create New Override (assign the component first)"));
+                menu.ShowAsContext();
+                return;
+            }
 
             menu.AddItem(new GUIContent("Create New Override"),
                 false, data => {

@@ -39,14 +39,15 @@ namespace Infohazard.StateSystem {
         
         private List<string> _validPaths;
         private Type _type;
+        private bool _warnedInvalidOverrides;
         
         public string TypeName {
             get => _typeName;
             set {
                 if (_typeName == value) return;
-                
+
                 _typeName = value;
-                _type = null;
+                Refresh();
             }
         }
         
@@ -63,7 +64,8 @@ namespace Infohazard.StateSystem {
 
         public List<string> ValidPaths {
             get {
-                if (_validPaths == null || _validPaths.Count == 0) {
+                // Not cached while the type can't be found, in case it appears after a recompile.
+                if (_validPaths == null || (_validPaths.Count == 0 && Type == null)) {
                     _validPaths = SerializedValueOverride.GetValidPathsForType(Type);
                 }
 
@@ -159,6 +161,7 @@ namespace Infohazard.StateSystem {
         private void Refresh() {
             _validPaths = null;
             _type = null;
+            _warnedInvalidOverrides = false;
 
             if (_overrides != null) {
                 foreach (SerializedValueOverride value in _overrides) {
@@ -171,9 +174,16 @@ namespace Infohazard.StateSystem {
             return type.Name + "Override";
         }
 
+        /// <summary>
+        /// The asset name without the default suffix (see <see cref="DefaultNameForType"/>).
+        /// An asset named exactly the default name gives the target type's name.
+        /// </summary>
         public string displayName {
             get {
+                if (Type == null) return name;
+
                 string suffix = DefaultNameForType(Type);
+                if (name == suffix) return Type.Name;
                 if (name.EndsWith(suffix)) {
                     return name.Substring(0, name.Length - suffix.Length);
                 } else {
@@ -182,11 +192,40 @@ namespace Infohazard.StateSystem {
             }
         }
 
+        /// <summary>
+        /// Log a warning listing the overrides whose paths don't resolve, once per asset (until it is refreshed).
+        /// </summary>
+        /// <returns>Whether there are any invalid overrides.</returns>
+        public bool WarnIfInvalidOverrides() {
+            if (_overrides == null) return false;
+
+            string[] invalid = _overrides.Where(o => !o.Valid).Select(o => $"'{o.Path}'").ToArray();
+            if (invalid.Length == 0) return false;
+
+            if (!_warnedInvalidOverrides) {
+                _warnedInvalidOverrides = true;
+                Debug.LogWarning($"{name}: these overrides don't resolve on {_typeName} and are skipped: " +
+                                 $"{string.Join(", ", invalid)}.", this);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Apply every override to <paramref name="component"/>. Overrides that don't resolve are skipped with a
+        /// warning. Throws if the component isn't of the target type.
+        /// </summary>
         public void ApplyTo(Component component) {
+            if (Type == null) {
+                Debug.LogError($"{name}: target type '{_typeName}' was not found, so nothing was applied.", this);
+                return;
+            }
+
             if (!Type.IsAssignableFrom(component.GetType())) {
                 throw new UnityException("Component " + component.name + " of incorrect type.");
             }
 
+            WarnIfInvalidOverrides();
             foreach (SerializedValueOverride item in _overrides) {
                 item.SetFieldValue(component);
             }

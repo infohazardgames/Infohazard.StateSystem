@@ -217,16 +217,17 @@ namespace Infohazard.StateSystem {
                     case SerializableType.UInt:
                     case SerializableType.Long:
                     case SerializableType.Char:
-                        _numberValue = (long)value;
+                        _numberValue = ToRawInt64(value);
                         break;
                     case SerializableType.ULong:
-                        _numberValue = (long)value + long.MinValue;
+                        // Stored offset by long.MinValue; kept for existing assets.
+                        _numberValue = unchecked(ToRawInt64(value) + long.MinValue);
                         break;
                     case SerializableType.Float:
-                        _vectorValue.x = (float)value;
+                        _vectorValue.x = Convert.ToSingle(value);
                         break;
                     case SerializableType.Double:
-                        _numberValue = BitConverter.DoubleToInt64Bits((double)value);
+                        _numberValue = BitConverter.DoubleToInt64Bits(Convert.ToDouble(value));
                         break;
                     case SerializableType.Bool:
                         _numberValue = ((bool)value) ? 1 : 0;
@@ -235,7 +236,7 @@ namespace Infohazard.StateSystem {
                         _stringValue = (string)value;
                         break;
                     case SerializableType.Enum:
-                        _numberValue = Convert.ToInt32((Enum)value);
+                        _numberValue = ToRawInt64(value);
                         break;
                     case SerializableType.Vector2:
                         _vectorValue = (Vector2)value;
@@ -266,12 +267,38 @@ namespace Infohazard.StateSystem {
             }
         }
 
-        public void FirstTimeInitialize(Type baseType) {
-            Initialize(baseType);
-            _type = GetSerializableType(ValueType);
+        /// <summary>
+        /// Convert an integer, char or enum value of any width to the long it is stored as.
+        /// Unsigned 64-bit values keep their bits (so large values become negative).
+        /// </summary>
+        private static long ToRawInt64(object value) {
+            switch (value) {
+                case ulong u:
+                    return unchecked((long) u);
+                case Enum e when Enum.GetUnderlyingType(e.GetType()) == typeof(ulong):
+                    return unchecked((long) Convert.ToUInt64(e));
+                default:
+                    return Convert.ToInt64(value);
+            }
         }
 
+        /// <summary>
+        /// Resolve the path against <paramref name="baseType"/> and set <see cref="Type"/> from the member found.
+        /// Used when the override is first created.
+        /// </summary>
+        public void FirstTimeInitialize(Type baseType) {
+            Initialize(baseType, true);
+        }
+
+        /// <summary>
+        /// Resolve the path against <paramref name="baseType"/>. The override is <see cref="Valid"/> only if every
+        /// part of the path resolves and the stored value can be applied to the member it leads to.
+        /// </summary>
         public void Initialize(Type baseType) {
+            Initialize(baseType, false);
+        }
+
+        private void Initialize(Type baseType, bool setType) {
             Valid = false;
             RenamedPath = null;
             FieldChain.Clear();
@@ -292,6 +319,14 @@ namespace Infohazard.StateSystem {
                 renamed |= member.Name != part;
                 FieldChain.Add(member);
                 currentType = member.Type;
+            }
+
+            if (setType) {
+                _type = GetSerializableType(ValueType);
+            } else if (!IsStoredValueCompatible(ValueType)) {
+                // The member's type changed since this override was authored.
+                FieldChain.Clear();
+                return;
             }
 
             if (renamed) {
@@ -326,9 +361,37 @@ namespace Infohazard.StateSystem {
             return true;
         }
 
+        /// <summary>
+        /// Whether the stored value can be applied to a member of type <paramref name="valueType"/>.
+        /// </summary>
+        private bool IsStoredValueCompatible(Type valueType) {
+            if (GetSerializableType(valueType) != _type) return false;
+
+            return _type != SerializableType.ObjectReference ||
+                   !_objectReferenceValue ||
+                   valueType.IsInstanceOfType(_objectReferenceValue);
+        }
+
+        /// <summary>
+        /// All instance fields of <paramref name="type"/> and its base classes, including private fields declared
+        /// in base classes (which <see cref="Type.GetFields(System.Reflection.BindingFlags)"/> leaves out).
+        /// Fields of more derived classes come first.
+        /// </summary>
+        private static IEnumerable<FieldInfo> GetAllFields(Type type) {
+            for (Type t = type; t != null && t != typeof(object); t = t.BaseType) {
+                foreach (FieldInfo field in t.GetFields(BindingFlags | BindingFlags.DeclaredOnly)) {
+                    yield return field;
+                }
+            }
+        }
+
         private static IGetSet FindMember(Type type, string name) {
-            FieldInfo field = type.GetField(name, BindingFlags);
-            if (field != null && IsValidField(field)) return new FieldGetSet(field);
+            for (Type t = type; t != null && t != typeof(object); t = t.BaseType) {
+                FieldInfo field = t.GetField(name, BindingFlags | BindingFlags.DeclaredOnly);
+                if (field == null) continue;
+                if (IsValidField(field)) return new FieldGetSet(field);
+                break;
+            }
 
             PropertyInfo property = type.GetProperty(name, BindingFlags);
             if (property != null && IsValidProperty(property)) return new PropertyGetSet(property);
@@ -337,7 +400,7 @@ namespace Infohazard.StateSystem {
         }
 
         private static IGetSet FindRenamedMember(Type type, string oldName) {
-            foreach (FieldInfo field in type.GetFields(BindingFlags)) {
+            foreach (FieldInfo field in GetAllFields(type)) {
                 if (!IsValidField(field)) continue;
                 if (field.GetCustomAttributes<FormerlySerializedAsAttribute>().Any(a => a.oldName == oldName) ||
                     field.GetCustomAttributes<FormerlyOverriddenAsAttribute>().Any(a => a.OldName == oldName)) {
@@ -355,7 +418,13 @@ namespace Infohazard.StateSystem {
             return null;
         }
 
+        /// <summary>
+        /// Read the value at this override's path on <paramref name="baseObject"/>. Returns null if the override
+        /// isn't <see cref="Valid"/> or a class along the path is null.
+        /// </summary>
         public object GetFieldValue(object baseObject) {
+            if (!Valid) return null;
+
             object currentObject = baseObject;
             foreach (IGetSet part in FieldChain) {
                 if (currentObject == null) return null;
@@ -365,11 +434,21 @@ namespace Infohazard.StateSystem {
             return currentObject;
         }
 
+        /// <summary>
+        /// Write the stored value at this override's path on <paramref name="baseObject"/>, constructing any null
+        /// classes along the path. Does nothing if the override isn't <see cref="Valid"/>.
+        /// </summary>
         public void SetFieldValue(object baseObject) {
+            if (!Valid) return;
             SetFieldValue(baseObject, 0, Value);
         }
 
+        /// <summary>
+        /// Write <paramref name="finalValue"/> at this override's path on <paramref name="baseObject"/>,
+        /// constructing any null classes along the path. Does nothing if the override isn't <see cref="Valid"/>.
+        /// </summary>
         public void SetFieldValue(object baseObject, object finalValue) {
+            if (!Valid) return;
             SetFieldValue(baseObject, 0, finalValue);
         }
 
@@ -409,6 +488,7 @@ namespace Infohazard.StateSystem {
         private static bool IsValidProperty(PropertyInfo property) {
             if (property.GetGetMethod() == null || property.GetSetMethod() == null) return false;
             if (!property.GetGetMethod().IsPublic || !property.GetSetMethod().IsPublic) return false;
+            if (property.GetIndexParameters().Length > 0) return false;
             if (property.GetCustomAttribute(typeof(NoOverridesAttribute)) != null) return false;
             return true;
         }
@@ -431,6 +511,7 @@ namespace Infohazard.StateSystem {
 
         public static List<string> GetValidPathsForType(Type type) {
             List<string> result = new List<string>();
+            if (type == null) return result;
             GetValidPathsForType(type, result, 0, string.Empty);
             return result;
         }
@@ -441,7 +522,7 @@ namespace Infohazard.StateSystem {
                 paths.Add(path);
             } else if (depth < MaxDepth && (depth == 0 || IsSerializableClass(type))) {
                 if (!string.IsNullOrEmpty(path)) path += '/';
-                foreach (FieldInfo field in type.GetFields(BindingFlags)) {
+                foreach (FieldInfo field in GetAllFields(type)) {
                     if (IsValidField(field)) GetValidPathsForType(field.FieldType, paths, depth + 1, path + field.Name);
                 }
                 foreach (PropertyInfo property in type.GetProperties(BindingFlags)) {

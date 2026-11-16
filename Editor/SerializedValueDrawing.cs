@@ -87,19 +87,38 @@ namespace Infohazard.StateSystem.Editor {
             EditorGUI.BeginDisabledGroup(!property.Valid);
             object value = property.Value;
             object newValue = value;
+
+            // Integer, char and layer mask fields are edited as a wider type, so compare those as numbers;
+            // comparing the boxed values would never match and would write the value back on every repaint.
+            bool? numberChanged = null;
             switch (property.Type) {
                 case SerializableType.Byte:
                 case SerializableType.SByte:
                 case SerializableType.Short:
                 case SerializableType.UShort:
-                case SerializableType.Int:
+                case SerializableType.Int: {
+                    int current = Convert.ToInt32(value);
+                    int edited = EditorGUILayout.IntField(label, current);
+                    numberChanged = edited != current;
+                    newValue = ClampToType(edited, property.Type);
+                    break;
+                }
                 case SerializableType.UInt:
-                    newValue = (long)EditorGUILayout.IntField(label, (int)value);
+                case SerializableType.Long: {
+                    long current = Convert.ToInt64(value);
+                    long edited = EditorGUILayout.LongField(label, current);
+                    numberChanged = edited != current;
+                    newValue = ClampToType(edited, property.Type);
                     break;
-                case SerializableType.Long:
-                case SerializableType.ULong:
-                    newValue = EditorGUILayout.LongField(label, (long)value);
+                }
+                case SerializableType.ULong: {
+                    // Shown as a long; values above long.MaxValue appear negative.
+                    long current = unchecked((long) (ulong) value);
+                    long edited = EditorGUILayout.LongField(label, current);
+                    numberChanged = edited != current;
+                    newValue = unchecked((ulong) edited);
                     break;
+                }
                 case SerializableType.Float:
                     newValue = EditorGUILayout.FloatField(label, (float)value);
                     break;
@@ -111,11 +130,7 @@ namespace Infohazard.StateSystem.Editor {
                     break;
                 case SerializableType.Char:
                     string result = EditorGUILayout.TextField(label, ((char)value).ToString());
-                    if (result.Length > 0) {
-                        newValue = (long)result[0];
-                    } else {
-                        newValue = (long)'\0';
-                    }
+                    newValue = result.Length > 0 ? result[0] : '\0';
                     break;
                 case SerializableType.String:
                     newValue = EditorGUILayout.TextField(label, (string)value);
@@ -146,22 +161,41 @@ namespace Infohazard.StateSystem.Editor {
                 case SerializableType.Color:
                     newValue = EditorGUILayout.ColorField(label, (Color)value, true, true, true);
                     break;
-                case SerializableType.LayerMask:
-                    LayerMask tempMask = EditorGUILayout.MaskField(label,
-                        InternalEditorUtility.LayerMaskToConcatenatedLayersMask((LayerMask)value),
+                case SerializableType.LayerMask: {
+                    int current = (LayerMask) value;
+                    int tempMask = EditorGUILayout.MaskField(label,
+                        InternalEditorUtility.LayerMaskToConcatenatedLayersMask(current),
                         InternalEditorUtility.layers);
-                    newValue = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(tempMask);
+                    int edited = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(tempMask);
+                    numberChanged = edited != current;
+                    newValue = (LayerMask) edited;
                     break;
+                }
                 case SerializableType.ObjectReference:
                     newValue = EditorGUILayout.ObjectField(label, (Object)value, property.Valid ? property.ValueType : typeof(Object), false);
                     break;
             }
-            if (!Equals(value, newValue)) {
+            if (numberChanged ?? !Equals(value, newValue)) {
                 Undo.RecordObject(reference, "Change Override Value");
                 property.Value = newValue;
                 EditorUtility.SetDirty(reference);
             }
             EditorGUI.EndDisabledGroup();
+        }
+
+        /// <summary>
+        /// Clamp an edited integer to the range of the member's type, so it isn't wrapped when stored.
+        /// </summary>
+        private static long ClampToType(long value, SerializableType type) {
+            return type switch {
+                SerializableType.Byte => Math.Clamp(value, byte.MinValue, byte.MaxValue),
+                SerializableType.SByte => Math.Clamp(value, sbyte.MinValue, sbyte.MaxValue),
+                SerializableType.Short => Math.Clamp(value, short.MinValue, short.MaxValue),
+                SerializableType.UShort => Math.Clamp(value, ushort.MinValue, ushort.MaxValue),
+                SerializableType.Int => Math.Clamp(value, int.MinValue, int.MaxValue),
+                SerializableType.UInt => Math.Clamp(value, uint.MinValue, uint.MaxValue),
+                _ => value,
+            };
         }
     }
 }

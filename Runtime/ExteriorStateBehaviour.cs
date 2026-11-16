@@ -25,6 +25,13 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 namespace Infohazard.StateSystem {
+    /// <summary>
+    /// Applies a <see cref="StateList"/> to another component, for components that can't derive from
+    /// <see cref="StateBehaviour"/>.
+    /// </summary>
+    /// <remarks>
+    /// Don't clone an instance whose states are already applied; see <see cref="StateList"/>.
+    /// </remarks>
     public class ExteriorStateBehaviour : MonoBehaviour, IStateBehaviour {
         [SerializeField, FormerlySerializedAs("component")]
         protected Component _component;
