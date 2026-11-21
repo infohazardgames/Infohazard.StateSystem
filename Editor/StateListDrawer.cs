@@ -1,17 +1,17 @@
 ﻿// The MIT License (MIT)
-// 
+//
 // Copyright (c) 2026-present Val Miller
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,6 +22,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Infohazard.Core;
 using Infohazard.Core.Editor;
 using UnityEditor;
@@ -32,14 +33,17 @@ using Object = UnityEngine.Object;
 namespace Infohazard.StateSystem.Editor {
     [CustomPropertyDrawer(typeof(StateList))]
     public class StateListDrawer : DraggableListDrawer {
-        const int gap = 4;
-        private string[] stateNames;
+        private const int Gap = 4;
+        private static readonly List<string> Headers = new();
+        private string[] _stateNames;
+        private SerializedObject _serializedObject;
 
         protected override ReorderableList CreateList(SerializedProperty prop) {
+            SerializedProperty listProp = GetListProperty(prop);
             ReorderableList list = base.CreateList(prop);
-            list.elementHeightCallback = null;
+            list.elementHeightCallback = index => GetElementHeight(listProp, index);
             list.onAddDropdownCallback = ListDropdown;
-            list.onReorderCallbackWithDetails = (l, oldIndex, newIndex) => RemapBlockedByAfterMove(l, oldIndex, newIndex);
+            list.onReorderCallbackWithDetails = RemapBlockedByAfterMove;
             list.onRemoveCallback = RemoveState;
             return list;
         }
@@ -50,7 +54,8 @@ namespace Infohazard.StateSystem.Editor {
         /// </summary>
         private static void RemapBlockedBy(SerializedProperty listProperty, int oldCount, Func<int, int> mapIndex) {
             for (int i = 0; i < listProperty.arraySize; i++) {
-                SerializedProperty maskProperty = listProperty.GetArrayElementAtIndex(i).FindPropertyRelative("_blockedBy");
+                SerializedProperty maskProperty =
+                    listProperty.GetArrayElementAtIndex(i).FindPropertyRelative("_blockedBy");
                 int oldMask = maskProperty.intValue;
                 int newMask = 0;
                 for (int bit = 0; bit < 32; bit++) {
@@ -95,7 +100,7 @@ namespace Infohazard.StateSystem.Editor {
         }
 
         protected override SerializedProperty GetListProperty(SerializedProperty prop) {
-            return prop.FindPropertyRelative("_states");
+            return prop.isArray ? prop : prop.FindPropertyRelative("_states");
         }
 
         /// <summary>
@@ -122,6 +127,7 @@ namespace Infohazard.StateSystem.Editor {
                         num++;
                         suffix = "_" + num;
                     }
+
                     if (num > 0) nameProperty.stringValue += suffix;
                     names.Add(nameProperty.stringValue);
 
@@ -134,13 +140,15 @@ namespace Infohazard.StateSystem.Editor {
                         valuesProperty.objectReferenceValue = null;
                     }
                 }
-                stateNames = names.ToArray();
+
+                _stateNames = names.ToArray();
             }
 
             base.OnGUI(position, property, label);
         }
 
-        private SerializedProperty CreateNewState(SerializedProperty listProperty, string name, ComponentOverride values) {
+        private SerializedProperty CreateNewState(SerializedProperty listProperty, string name,
+                                                  ComponentOverride values) {
             listProperty.serializedObject.Update();
             Undo.RecordObject(listProperty.serializedObject.targetObject, "Create State");
             listProperty.arraySize++;
@@ -158,9 +166,7 @@ namespace Infohazard.StateSystem.Editor {
         private void ListDropdown(Rect rect, ReorderableList list) {
             GenericMenu menu = new GenericMenu();
             menu.AddItem(new GUIContent("Use Existing Override"),
-                false, data => {
-                    CreateNewState(list.serializedProperty, "Empty", null);
-                }, null);
+                         false, data => { CreateNewState(list.serializedProperty, "Empty", null); }, null);
 
             if (GetStateType(list.serializedProperty) == null) {
                 menu.AddDisabledItem(new GUIContent("Create New Override (assign the component first)"));
@@ -169,30 +175,64 @@ namespace Infohazard.StateSystem.Editor {
             }
 
             menu.AddItem(new GUIContent("Create New Override"),
-                false, data => {
-                    Type type = GetStateType(list.serializedProperty);
-                    string path = EditorUtility.SaveFilePanelInProject("Save New Override", ComponentOverride.DefaultNameForType(type), "asset", "Create");
-                    if (!string.IsNullOrEmpty(path)) {
-                        ComponentOverride newOverride = ScriptableObject.CreateInstance<ComponentOverride>();
-                        newOverride.TypeName = type.FullName;
-                        AssetDatabase.CreateAsset(newOverride, path);
-                        CreateNewState(list.serializedProperty, newOverride.displayName, newOverride);
-                    }
-                }, null);
+                         false, data => {
+                             Type type = GetStateType(list.serializedProperty);
+                             string path = EditorUtility.SaveFilePanelInProject(
+                                 "Save New Override", ComponentOverride.DefaultNameForType(type), "asset", "Create");
+                             if (!string.IsNullOrEmpty(path)) {
+                                 ComponentOverride newOverride = ScriptableObject.CreateInstance<ComponentOverride>();
+                                 newOverride.TypeName = type.FullName;
+                                 AssetDatabase.CreateAsset(newOverride, path);
+                                 CreateNewState(list.serializedProperty, newOverride.displayName, newOverride);
+                             }
+                         }, null);
 
             menu.ShowAsContext();
         }
 
-        protected override void DrawElement(Rect rect, int index, bool isActive, bool isFocused, SerializedProperty prop) {
+        protected override float GetElementHeight(SerializedProperty prop, int index) {
             SerializedProperty element = GetElementProperty(prop, index);
-            rect.height = EditorGUI.GetPropertyHeight(element.FindPropertyRelative("_name"), GUIContent.none);
 
-            MathUtility.SplitHorizontal(rect, gap, out Rect r1, out Rect r2);
-            MathUtility.SplitHorizontal(r1, gap, out Rect r3, out Rect r4);
-            MathUtility.SplitHorizontal(r2, gap, out Rect r5, out Rect r6, 0.4f);
+            float total = EditorGUIUtility.singleLineHeight;
+            if (!element.isExpanded) {
+                return total;
+            }
+
+            SerializedProperty valuesProperty = element.FindPropertyRelative("_values");
+            if (valuesProperty.objectReferenceValue is not ComponentOverride asset) {
+                return total;
+            }
+
+            total += (asset.Overrides.Length + 1) *
+                     (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+
+            return total;
+        }
+
+        protected override void DrawElement(Rect rect, int index, bool isActive, bool isFocused,
+                                            SerializedProperty prop) {
+            SerializedProperty element = GetElementProperty(prop, index);
+
+            Rect firstLineRect = rect;
+            firstLineRect.height = EditorGUIUtility.singleLineHeight;
+            Rect valuesRect = rect;
+            valuesRect.yMin = firstLineRect.yMax + EditorGUIUtility.standardVerticalSpacing;
+
+            MathUtility.SplitHorizontal(firstLineRect, Gap, out Rect r1, out Rect r2, 0.7f);
+            MathUtility.SplitHorizontal(r1, Gap, out Rect r3, out Rect r4);
+            MathUtility.SplitHorizontal(r2, Gap, out Rect r5, out Rect r6, 0.4f);
+
+            SerializedProperty valuesProperty = element.FindPropertyRelative("_values");
+
+            ComponentOverride asset = valuesProperty.objectReferenceValue as ComponentOverride;
+
+            if (asset != null) {
+                r3.xMin += 12;
+                element.isExpanded = EditorGUI.Foldout(r3, element.isExpanded, GUIContent.none);
+            }
 
             EditorGUI.PropertyField(r3, element.FindPropertyRelative("_name"), GUIContent.none);
-            EditorGUI.PropertyField(r4, element.FindPropertyRelative("_values"), GUIContent.none);
+            EditorGUI.PropertyField(r4, valuesProperty, GUIContent.none);
 
             TextAnchor align = GUI.skin.label.alignment;
             GUI.skin.label.alignment = TextAnchor.MiddleRight;
@@ -201,8 +241,8 @@ namespace Infohazard.StateSystem.Editor {
             EditorGUI.LabelField(r5, new GUIContent("Blocked By:"));
             GUI.skin.label.alignment = align;
 
-            r6.xMax -= r6.height + gap;
-            Rect r7 = new Rect(r6.xMax + gap, r6.y, r6.height, r6.height);
+            r6.xMax -= r6.height + Gap;
+            Rect r7 = new Rect(r6.xMax + Gap, r6.y, r6.height, r6.height);
 
             if (Application.isPlaying && prop.serializedObject.targetObject is IStateBehaviour stateBehavior) {
                 string name = element.FindPropertyRelative("_name").stringValue;
@@ -216,7 +256,101 @@ namespace Infohazard.StateSystem.Editor {
             }
 
             SerializedProperty maskProp = element.FindPropertyRelative("_blockedBy");
-            maskProp.intValue = EditorGUI.MaskField(r6, maskProp.intValue, stateNames) & ~(1 << index);
+            maskProp.intValue = EditorGUI.MaskField(r6, maskProp.intValue, _stateNames) & ~(1 << index);
+
+            if (asset && element.isExpanded) {
+                DrawComponentOverrideGUI(valuesRect, asset);
+            }
+        }
+
+        private void AddOverrideListDropdown(ComponentOverride asset) {
+            GenericMenu menu = new GenericMenu();
+
+            foreach (string path in asset.UnusedValidPaths) {
+                menu.AddItem(new GUIContent(path),
+                             false, (object data) => {
+                                 Undo.RecordObject(asset, "Add Override");
+                                 asset.AddOverride(path);
+                                 EditorUtility.SetDirty(asset);
+                             },
+                             null);
+            }
+
+            menu.ShowAsContext();
+        }
+
+        private void RemoveOverride(ComponentOverride asset, int index) {
+            Undo.RecordObject(asset, "Remove Override");
+            asset.RemoveOverride(index);
+            EditorUtility.SetDirty(asset);
+        }
+
+        private SerializedObject GetSerializedObject(ComponentOverride target) {
+            if (_serializedObject?.targetObject != target) {
+                if (target.ApplyRenamedPaths()) {
+                    EditorUtility.SetDirty(target);
+                }
+
+                _serializedObject = new SerializedObject(target);
+            }
+
+            return _serializedObject;
+        }
+
+        public void DrawComponentOverrideGUI(Rect rect, ComponentOverride asset) {
+            asset.CheckValid();
+
+            SerializedObject serializedObject = GetSerializedObject(asset);
+            serializedObject.Update();
+
+            Rect lineRect = rect;
+            lineRect.xMin += 16;
+            lineRect.height = EditorGUIUtility.singleLineHeight;
+
+            if (asset.Type == null) {
+                EditorGUI.LabelField(lineRect, "Invalid Target Type", EditorStyles.boldLabel);
+            } else {
+                int toRemove = -1;
+                Headers.Clear();
+                int indent = EditorGUI.indentLevel;
+                for (int i = 0; i < asset.Overrides.Length; i++) {
+                    SerializedValueOverride prop = asset.Overrides[i];
+                    SerializedValueDrawing.UpdateHeading(prop, Headers);
+
+                    Rect valueRect = lineRect;
+                    valueRect.xMax -= 20 + Gap;
+                    Rect buttonRect = lineRect;
+                    buttonRect.xMin = valueRect.xMax + Gap;
+
+                    SerializedValueDrawing.DrawRect(valueRect, asset, prop);
+
+                    if (GUI.Button(buttonRect, "X")) {
+                        toRemove = i;
+                    }
+
+                    lineRect.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                }
+
+                EditorGUI.BeginDisabledGroup(!asset.UnusedValidPaths.Any());
+                EditorGUI.indentLevel = indent;
+
+                Rect addButtonRect = lineRect;
+                addButtonRect.width = Mathf.Min(addButtonRect.width, 150);
+                if (EditorGUI.DropdownButton(
+                        addButtonRect,
+                        new GUIContent("Add Override"),
+                        FocusType.Keyboard)) {
+                    AddOverrideListDropdown(asset);
+                }
+
+                EditorGUI.EndDisabledGroup();
+
+                if (toRemove >= 0) {
+                    RemoveOverride(asset, toRemove);
+                }
+            }
+
+            serializedObject.ApplyModifiedProperties();
         }
     }
 }

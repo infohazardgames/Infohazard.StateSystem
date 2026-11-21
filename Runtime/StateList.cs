@@ -1,17 +1,17 @@
 ﻿// The MIT License (MIT)
-// 
+//
 // Copyright (c) 2026-present Val Miller
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -25,22 +25,25 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Serialization;
-
 using Object = UnityEngine.Object;
 
 namespace Infohazard.StateSystem {
     [Serializable]
     public struct State {
-        [FormerlySerializedAs("name")] [SerializeField]
+        [FormerlySerializedAs("name")]
+        [SerializeField]
         private string _name;
 
-        [FormerlySerializedAs("values")] [SerializeField]
+        [FormerlySerializedAs("values")]
+        [SerializeField]
         private ComponentOverride _values;
 
-        [FormerlySerializedAs("blockedBy")] [SerializeField]
+        [FormerlySerializedAs("blockedBy")]
+        [SerializeField]
         private int _blockedBy;
 
-        [FormerlySerializedAs("isActive")] [SerializeField]
+        [FormerlySerializedAs("isActive")]
+        [SerializeField]
         private bool _isActive;
 
         public bool IsBlocked { get; set; }
@@ -48,6 +51,7 @@ namespace Infohazard.StateSystem {
         public string Name => _name;
         public ComponentOverride Values => _values;
         public int BlockedBy => _blockedBy;
+
         public bool IsActive {
             get => _isActive;
             set => _isActive = value;
@@ -68,12 +72,14 @@ namespace Infohazard.StateSystem {
     /// </remarks>
     [Serializable]
     public class StateList {
-        [FormerlySerializedAs("states")] [SerializeField]
+        [FormerlySerializedAs("states")]
+        [SerializeField]
         private State[] _states;
-        
+
         private Object _owner;
         private object[] _fieldDefaultValues;
         public StateList() { }
+
         public StateList(State[] states) {
             _states = states;
         }
@@ -166,6 +172,7 @@ namespace Infohazard.StateSystem {
                     return i;
                 }
             }
+
             return -1;
         }
 
@@ -187,10 +194,10 @@ namespace Infohazard.StateSystem {
 
         private bool IsStateBlockedBy(int state, int blockingState) {
             return state != blockingState &&
-                blockingState < MaxBlockingStates &&
-                _states[blockingState].IsActive && 
-                !_states[blockingState].IsBlocked && 
-                (_states[state].BlockedBy & (1 << blockingState)) != 0;
+                   blockingState < MaxBlockingStates &&
+                   _states[blockingState].IsActive &&
+                   !_states[blockingState].IsBlocked &&
+                   (_states[state].BlockedBy & (1 << blockingState)) != 0;
         }
 
         public bool IsStateActive(string state) {
@@ -217,7 +224,8 @@ namespace Infohazard.StateSystem {
         }
 
         private void UpdateActiveAndBlocked(int stateIndex, bool active, bool isBlocked) {
-            bool fieldStatusChanging = (active && !isBlocked) != (_states[stateIndex].IsActive && !_states[stateIndex].IsBlocked);
+            bool fieldStatusChanging = (active && !isBlocked) !=
+                                       (_states[stateIndex].IsActive && !_states[stateIndex].IsBlocked);
 
             _states[stateIndex].IsBlocked = isBlocked;
             _states[stateIndex].IsActive = active;
@@ -236,8 +244,8 @@ namespace Infohazard.StateSystem {
             }
 
             for (int i = 0; i < _states.Length; i++) {
-                if (i != stateIndex && 
-                    _states[i].IsActive && 
+                if (i != stateIndex &&
+                    _states[i].IsActive &&
                     IsStateBlockedBy(i, stateIndex) != _states[i].IsBlocked &&
                     IsStateBlocked(i) != _states[i].IsBlocked) {
                     UpdateActiveAndBlocked(i, _states[i].IsActive, !_states[i].IsBlocked);
@@ -270,12 +278,14 @@ namespace Infohazard.StateSystem {
             if (previous < 0) {
                 _fieldDefaultValues[fieldID] = valueOverride.GetFieldValue(_owner);
             }
+
             valueOverride.SetFieldValue(_owner);
         }
 
         private void DeactivateField(int stateIndex, int localFieldIndex) {
             int fieldID = _states[stateIndex].FieldIDs[localFieldIndex];
-            int previous = GetFirstStateControllingField(fieldID, stateIndex, out SerializedValueOverride previousValueOverride);
+            int previous =
+                GetFirstStateControllingField(fieldID, stateIndex, out SerializedValueOverride previousValueOverride);
 
             if (previous >= 0 && previous < stateIndex) return;
 

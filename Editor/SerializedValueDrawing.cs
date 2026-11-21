@@ -1,17 +1,17 @@
 ﻿// The MIT License (MIT)
-// 
+//
 // Copyright (c) 2026-present Val Miller
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -173,6 +173,121 @@ namespace Infohazard.StateSystem.Editor {
                 }
                 case SerializableType.ObjectReference:
                     newValue = EditorGUILayout.ObjectField(label, (Object)value, property.Valid ? property.ValueType : typeof(Object), false);
+                    break;
+            }
+            if (numberChanged ?? !Equals(value, newValue)) {
+                Undo.RecordObject(reference, "Change Override Value");
+                property.Value = newValue;
+                EditorUtility.SetDirty(reference);
+            }
+            EditorGUI.EndDisabledGroup();
+        }
+
+        public static void DrawRect(Rect rect, Object reference, SerializedValueOverride property) {
+            InitResources();
+            GUIContent label = new GUIContent(ObjectNames.NicifyVariableName(property.FieldName));
+            if (property.Valid) {
+                label.image = property.IsProperty ? _iconProperty : _iconField;
+            } else {
+                label.image = _iconMissing;
+            }
+
+            EditorGUI.BeginDisabledGroup(!property.Valid);
+            object value = property.Value;
+            object newValue = value;
+
+            // Integer, char and layer mask fields are edited as a wider type, so compare those as numbers;
+            // comparing the boxed values would never match and would write the value back on every repaint.
+            bool? numberChanged = null;
+            switch (property.Type) {
+                case SerializableType.Byte:
+                case SerializableType.SByte:
+                case SerializableType.Short:
+                case SerializableType.UShort:
+                case SerializableType.Int: {
+                    int current = Convert.ToInt32(value);
+                    int edited = EditorGUI.IntField(rect, label, current);
+                    numberChanged = edited != current;
+                    newValue = ClampToType(edited, property.Type);
+                    break;
+                }
+                case SerializableType.UInt:
+                case SerializableType.Long: {
+                    long current = Convert.ToInt64(value);
+                    long edited = EditorGUI.LongField(rect, label, current);
+                    numberChanged = edited != current;
+                    newValue = ClampToType(edited, property.Type);
+                    break;
+                }
+                case SerializableType.ULong: {
+                    // Shown as a long; values above long.MaxValue appear negative.
+                    long current = unchecked((long) (ulong) value);
+                    long edited = EditorGUI.LongField(rect, label, current);
+                    numberChanged = edited != current;
+                    newValue = unchecked((ulong) edited);
+                    break;
+                }
+                case SerializableType.Float:
+                    newValue = EditorGUI.FloatField(rect, label, (float)value);
+                    break;
+                case SerializableType.Double:
+                    newValue = EditorGUI.DoubleField(rect, label, (double)value);
+                    break;
+                case SerializableType.Bool:
+                    newValue = EditorGUI.Toggle(rect, label, (bool)value);
+                    break;
+                case SerializableType.Char:
+                    string result = EditorGUI.TextField(rect, label, ((char)value).ToString());
+                    newValue = result.Length > 0 ? result[0] : '\0';
+                    break;
+                case SerializableType.String:
+                    newValue = EditorGUI.TextField(rect, label, (string)value);
+                    break;
+                case SerializableType.Enum:
+                    if (value == null) {
+                        EditorGUI.LabelField(rect, label, new GUIContent("Invalid Enum"));
+                    } else if (property.IsEnumFlags) {
+                        newValue = EditorGUI.EnumFlagsField(rect, label, (Enum)value);
+                    } else {
+                        newValue = EditorGUI.EnumPopup(rect, label, (Enum)value);
+                    }
+                    break;
+                case SerializableType.Vector2:
+                    newValue = EditorGUI.Vector2Field(rect, label, (Vector2)value);
+                    break;
+                case SerializableType.Vector3:
+                    newValue = EditorGUI.Vector3Field(rect, label, (Vector3)value);
+                    break;
+                case SerializableType.Vector4:
+                    newValue = EditorGUI.Vector4Field(rect, label, (Vector4)value);
+                    break;
+                case SerializableType.Quaternion:
+                    Quaternion q = (Quaternion)value;
+                    Vector4 v = EditorGUI.Vector4Field(rect, label, new Vector4(q.x, q.y, q.z, q.w));
+                    newValue = new Quaternion(v.x, v.y, v.z, v.w);
+                    break;
+                case SerializableType.Color:
+                    newValue = EditorGUI.ColorField(rect, label, (Color)value, true, true, true);
+                    break;
+                case SerializableType.LayerMask: {
+                    int current = (LayerMask) value;
+                    int tempMask = EditorGUI.MaskField(
+                        rect,
+                        label,
+                        InternalEditorUtility.LayerMaskToConcatenatedLayersMask(current),
+                        InternalEditorUtility.layers);
+                    int edited = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(tempMask);
+                    numberChanged = edited != current;
+                    newValue = (LayerMask) edited;
+                    break;
+                }
+                case SerializableType.ObjectReference:
+                    newValue = EditorGUI.ObjectField(
+                        rect,
+                        label,
+                        (Object)value,
+                        property.Valid ? property.ValueType : typeof(Object),
+                        false);
                     break;
             }
             if (numberChanged ?? !Equals(value, newValue)) {
