@@ -126,8 +126,6 @@ namespace Infohazard.StateSystem.Tests.Editor {
         public void Clone_OfInitializedBehaviour_KeepsOverriddenValues() {
             // Known limitation (#23, documented on StateList): a clone of a live object captures the overridden
             // values as its defaults. This checks today's behaviour, so a change to it is noticed.
-            // TestFieldsStateBehaviour rather than TestStateBehaviour: Unity logs an error when it serializes the
-            // latter's long-backed enum field during Instantiate.
             ComponentOverride values = CreateOverride<TestFieldsStateBehaviour>(("fieldA", 5f));
             var original = CreateStateBehaviour<TestFieldsStateBehaviour>(new StateSpec("A", values));
             original.fieldA = 2;

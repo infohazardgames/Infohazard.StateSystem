@@ -203,7 +203,7 @@ namespace Infohazard.StateSystem.Tests.Editor {
             uintFlags.Value = TestUIntFlags.High;
             Assert.AreEqual(TestUIntFlags.High, uintFlags.Value);
 
-            SerializedValueOverride longEnum = Add("longEnumValue");
+            SerializedValueOverride longEnum = Add("LongEnumValue");
             Assert.DoesNotThrow(() => longEnum.Value = TestLongEnum.Big);
             Assert.AreEqual(TestLongEnum.Big, longEnum.Value);
         }
@@ -227,7 +227,7 @@ namespace Infohazard.StateSystem.Tests.Editor {
                 "byteValue", "sbyteValue", "shortValue", "ushortValue", "intValue", "uintValue", "longValue",
                 "ulongValue", "floatValue", "doubleValue", "boolValue", "charValue", "stringValue", "enumValue",
                 "flagsValue", "vector2Value", "vector3Value", "vector4Value", "quaternionValue", "colorValue",
-                "layerMaskValue", "objectValue", "materialValue", "uintFlagsValue", "longEnumValue",
+                "layerMaskValue", "objectValue", "materialValue", "uintFlagsValue", "LongEnumValue",
                 "_serializedPrivate", "FloatProperty", "SerializedPrivate",
             }, paths);
         }

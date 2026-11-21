@@ -63,7 +63,9 @@ namespace Infohazard.StateSystem.Tests.PlayMode {
 
         // Enums with unusual underlying types.
         public TestUIntFlags uintFlagsValue;
-        public TestLongEnum longEnumValue;
+        // A property, not a field: Unity can't serialize long-backed enums and logs an error (failing builds and
+        // Instantiate) for such a field. Properties with a public getter and setter are still overridable.
+        public TestLongEnum LongEnumValue { get; set; }
 
         // Nested paths.
         public TestStruct structValue;
